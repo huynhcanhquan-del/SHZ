@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>组词对对碰｜汉字-拼音配对游戏</title>
+  <style>
+    :root{
+      --bg:#ffffff;
+      --panel:#f8fafc; /* slate-50 */
+      --card:#ffffff; /* white */
+      --card-hover:#f3f4f6; /* gray-100 */
+      --accent:#16a34a; /* green-600 */
+      --accent-2:#2563eb; /* blue-600 */
+      --danger:#dc2626; /* red-600 */
+      --text:#111827; /* gray-900 */
+      --muted:#64748b; /* slate-500 */
+      --gold:#f59e0b; /* amber-500 */
+      --border:#e5e7eb; /* gray-200 */
+      --success-bg:#ecfdf5; /* emerald-50 */
+    }
+    html,body{height:100%;}
+    body{
+      margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background:#ffffff;
+      color: var(--text);
+      display:flex; flex-direction:column; gap:16px;
+      padding: 18px;
+    }
+    .topbar{
+      display:grid; grid-template-columns: 1fr auto 1fr; align-items:center; gap:12px;
+    }
+    .center{justify-self:center;}
+    .right{justify-self:end;}
+    .score{font-weight:700; font-size:18px}
+    .score .num{color:var(--gold)}
+    .timer{
+      display:flex; align-items:center; gap:10px; background:var(--panel); padding:8px 14px; border-radius:999px; box-shadow: 0 4px 10px rgba(0,0,0,.06);
+      border:1px solid var(--border);
+    }
+    button.primary{
+      appearance:none; border:0; padding:8px 14px; border-radius:999px; background:linear-gradient(135deg, var(--accent-2), #06b6d4);
+      color:white; font-weight:700; cursor:pointer; box-shadow:0 8px 20px rgba(37,99,235,.25);
+    }
+    button.primary:disabled{opacity:.6; cursor:not-allowed;}
+    .chip{padding:6px 10px; border-radius:999px; background:#ffffff; border:1px solid var(--border); color:var(--muted); font-weight:650;}
+
+    .board{display:grid; gap:14px;}
+    .row-title{font-size:14px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin: 4px 2px 2px;}
+    .grid{display:grid; grid-template-columns: repeat(auto-fill, minmax(110px,1fr)); gap:12px;}
+
+    .card{position:relative; user-select:none; background:var(--card); border:1px solid var(--border); border-radius:14px; padding:14px; display:flex; align-items:center; justify-content:center; height:76px; cursor:pointer; transition: transform .12s ease, background .2s ease, border-color .2s ease;}
+    .card:hover{background:var(--card-hover); transform:translateY(-1px)}
+    .card.selected{outline:2px solid var(--accent-2); box-shadow:0 0 0 4px rgba(37,99,235,.15) inset;}
+    .card.locked{background:var(--success-bg); border-color:#34d399;}
+    .card.locked .txt{color:#065f46}
+    .card .txt{font-size:22px; font-weight:800; letter-spacing:.02em; color:#000000}
+    .card .sub{font-size:18px; font-weight:800; color:#000000}
+    .badge{position:absolute; top:6px; right:6px; font-size:16px;}
+    .ok{color:var(--accent)}
+    .wrong{color:var(--danger)}
+
+    .pairs{
+      margin-top:6px; padding:14px; border-radius:16px; background:#fafafa; border:1px solid var(--border);
+    }
+    .pairs h3{margin:0 0 8px; font-size:16px; color:#374151}
+    .pair-list{display:flex; flex-wrap:wrap; gap:10px}
+    .pair-chip{display:flex; align-items:center; gap:6px; background:#ffffff; border:1px solid var(--border); padding:6px 10px; border-radius:999px;}
+
+    .shake{animation:shake .3s linear}
+    @keyframes shake{0%{transform:translateX(0)}20%{transform:translateX(-3px)}40%{transform:translateX(3px)}60%{transform:translateX(-2px)}80%{transform:translateX(2px)}100%{transform:translateX(0)}}
+
+    .footer{display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:8px}
+    .final{font-weight:800}
+
+    .hint{font-size:12px; color:var(--muted)}
+    .link-line{position:fixed; pointer-events:none; z-index:5}
+
+    @media (max-width: 520px){
+      .card{height:64px}
+      .card .txt{font-size:18px}
+      .grid{grid-template-columns: repeat(2, minmax(120px,1fr));}
+    }
+    /* 开发者测试面板样式（默认折叠） */
+    details#tests{margin-top:8px}
+    #testList{margin:6px 0 0; padding-left:18px}
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="left hint">提示：点击<em>一个汉字</em>和<em>一个拼音</em>来配对。</div>
+    <div class="center timer">
+      <button id="startBtn" class="primary">开始</button>
+      <span id="time" class="chip">00:00</span>
+    </div>
+    <div class="right score">分数：<span class="num" id="score">0</span> / 100</div>
+  </div>
+
+  <div class="board">
+    <div>
+      <div class="row-title">上边：汉字</div>
+      <div id="hanziGrid" class="grid" aria-label="汉字卡片区"></div>
+    </div>
+
+    <div>
+      <div class="row-title">下边：拼音</div>
+      <div id="pinyinGrid" class="grid" aria-label="拼音卡片区"></div>
+    </div>
+
+    <div class="pairs">
+      <h3>配对正确的词组将出现在这里：</h3>
+      <div id="pairList" class="pair-list" aria-live="polite"></div>
+    </div>
+
+    <div class="footer">
+      <div class="hint">规则：✔ 正确加分并朗读；✖ 错误不得分且扣分。每个词只能用一次。</div>
+      <div>
+        <button id="resetBtn" class="primary" style="background:linear-gradient(135deg,#a855f7,#06b6d4)">重置</button>
+      </div>
+    </div>
+
+    <!-- 开发者测试（默认折叠，可展开查看） -->
+    <details id="tests">
+      <summary class="hint">开发者测试（点击展开/收起）</summary>
+      <ul id="testList"></ul>
+    </details>
+  </div>
+
+  <svg class="link-line" width="0" height="0" id="svg"></svg>
+
+  <script>
+    // === 数据 ===
+    const PAIRS = [
+      {hanzi:"老师", pinyin:"lǎoshī"},
+      {hanzi:"同学", pinyin:"tóngxué"},
+      {hanzi:"再见", pinyin:"zàijiàn"},
+      {hanzi:"家庭", pinyin:"jiātíng"},
+      {hanzi:"家人", pinyin:"jiārén"},
+      {hanzi:"对象", pinyin:"duìxiàng"},
+      {hanzi:"回家", pinyin:"huíjiā"},
+      {hanzi:"姐姐", pinyin:"jiějie"},
+      {hanzi:"妹妹", pinyin:"mèimei"},
+      {hanzi:"爸爸", pinyin:"bàba"},
+      {hanzi:"妈妈", pinyin:"māma"},
+      {hanzi:"哥哥", pinyin:"gēge"},
+      {hanzi:"宝宝", pinyin:"bǎobao"},
+      {hanzi:"什么", pinyin:"shénme"},
+      {hanzi:"名字", pinyin:"míngzi"},
+      {hanzi:"姓",   pinyin:"xìng"},
+      {hanzi:"您",   pinyin:"nín"},
+    ];
+
+    // === 计分规则（可调） ===
+    const POINTS_CORRECT = 100 / PAIRS.length;   // 每题基础分（约 5.88）
+    const POINTS_WRONG   = POINTS_CORRECT / 2;   // 默认错题扣半分值（约 2.94）
+
+    // === 工具 ===
+    const $ = sel => document.querySelector(sel);
+    const $$ = sel => Array.from(document.querySelectorAll(sel));
+    const hanziGrid = $('#hanziGrid');
+    const pinyinGrid = $('#pinyinGrid');
+    const startBtn = $('#startBtn');
+    const resetBtn = $('#resetBtn');
+    const timeEl = $('#time');
+    const scoreEl = $('#score');
+    const pairList = $('#pairList');
+
+    let started = false;
+    let timer = null;
+    let seconds = 0;
+
+    let hanziCards = [];
+    let pinyinCards = [];
+
+    let selection = [];// {type:'hanzi'|'pinyin', key:string, el:HTMLElement}
+    let matched = new Set(); // stores hanzi key
+    let score = 0;          // 当前得分（0~100）
+
+    function clampScore(v){ return Math.max(0, Math.min(100, v)); }
+
+    function shuffle(arr){
+      const a = arr.slice();
+      for(let i=a.length-1;i>0;i--){
+        const j = Math.floor(Math.random()*(i+1));
+        [a[i],a[j]] = [a[j],a[i]];
+      }
+      return a;
+    }
+
+    function fmtTime(sec){
+      const m = String(Math.floor(sec/60)).padStart(2,'0');
+      const s = String(sec%60).padStart(2,'0');
+      return `${m}:${s}`;
+    }
+
+    function startTimer(){
+      seconds = 0; timeEl.textContent = fmtTime(0);
+      timer = setInterval(()=>{ seconds++; timeEl.textContent = fmtTime(seconds); }, 1000);
+    }
+    function stopTimer(){ if(timer){ clearInterval(timer); timer = null; } }
+
+    // 朗读（优先男声普通话）
+    function ttsSpeak(text){
+      try{
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.lang = 'zh-CN';
+        utter.rate = 1.0;
+        utter.pitch = 0.85; // 较低音色，接近男声
+        // 选择更像男声的普通话声音（不同浏览器可用性不同）
+        const preferNames = [/male/i, /男/, /Kangkang/i, /Liang/i, /Yunze/i, /Yunxi/i, /Huihui/i, /Microsoft .* Chinese \(Mainland\)/i];
+        const voices = speechSynthesis.getVoices().filter(v=>/zh|Chinese/i.test(v.lang||v.name));
+        let chosen = null;
+        for(const preg of preferNames){ chosen = voices.find(v=>preg.test(v.name)); if(chosen) break; }
+        if(!chosen) chosen = voices.find(v=>/zh-CN|zh_CN|cmn-Hans-CN/i.test(v.lang||''));
+        if(chosen) utter.voice = chosen;
+        speechSynthesis.cancel();
+        speechSynthesis.speak(utter);
+      }catch(e){ /* 若不支持 Web Speech，静默忽略 */ }
+    }
+
+    function createCard(type, key, label){
+      const div = document.createElement('button');
+      div.className = 'card';
+      div.setAttribute('data-type', type);
+      div.setAttribute('data-key', key);
+      div.setAttribute('aria-pressed','false');
+      div.innerHTML = `<span class="txt">${label}</span><span class="badge" aria-hidden="true"></span>`;
+      div.addEventListener('click', ()=>onCardClick(div));
+      return div;
+    }
+
+    function buildBoards(){
+      hanziGrid.innerHTML = '';
+      pinyinGrid.innerHTML = '';
+      pairList.innerHTML = '';
+      selection = []; matched.clear();
+      score = 0; updateScore();
+
+      const H = shuffle(PAIRS.map(p=>p.hanzi));
+      const P = shuffle(PAIRS.map(p=>p.pinyin));
+
+      hanziCards = H.map(h => createCard('hanzi', h, h));
+      pinyinCards = P.map(p => createCard('pinyin', p, p));
+
+      hanziCards.forEach(c=>hanziGrid.appendChild(c));
+      pinyinCards.forEach(c=>pinyinGrid.appendChild(c));
+
+      // 初始为不可点，直到点击“开始”
+      setBoardInteractivity(false);
+    }
+
+    function setBoardInteractivity(enabled){
+      [...hanziCards, ...pinyinCards].forEach(el=>{
+        el.disabled = !enabled || el.classList.contains('locked');
+        el.style.cursor = (!enabled || el.classList.contains('locked')) ? 'not-allowed' : 'pointer';
+        el.style.opacity = (!enabled && !el.classList.contains('locked')) ? .6 : 1;
+      });
+    }
+
+    function onCardClick(card){
+      if(!started) return;
+      if(card.classList.contains('locked')) return;
+
+      const type = card.getAttribute('data-type');
+      const key = card.getAttribute('data-key');
+
+      // 不允许连续选择同一行的两张卡
+      if(selection.length===1 && selection[0].type===type){
+        card.classList.add('shake');
+        setTimeout(()=>card.classList.remove('shake'), 300);
+        return;
+      }
+
+      if(card.classList.contains('selected')){
+        card.classList.remove('selected');
+        card.setAttribute('aria-pressed','false');
+        selection = selection.filter(s=>s.el!==card);
+        return;
+      }
+
+      card.classList.add('selected');
+      card.setAttribute('aria-pressed','true');
+      selection.push({type, key, el:card});
+
+      if(selection.length===2){
+        checkMatch();
+      }
+    }
+
+    function getMatchResult(hanziKey, pinyinKey){
+      const found = PAIRS.find(p=>p.hanzi===hanziKey && p.pinyin===pinyinKey);
+      return !!found;
+    }
+
+    function markCard(card, ok){
+      const badge = card.querySelector('.badge');
+      badge.textContent = ok ? '✅' : '✖';
+      badge.className = 'badge ' + (ok ? 'ok' : 'wrong');
+      if(!ok){
+        card.classList.add('shake');
+        setTimeout(()=>{
+          card.classList.remove('shake');
+          badge.textContent='';
+        }, 400);
+      }
+    }
+
+    function lockCard(card){
+      card.classList.remove('selected');
+      card.classList.add('locked');
+      card.setAttribute('aria-pressed','false');
+      card.disabled = true;
+    }
+
+    function updateScore(){
+      score = clampScore(score);
+      scoreEl.textContent = String(Math.round(score));
+    }
+
+    function addPairChip(hanzi, pinyin){
+      const chip = document.createElement('span');
+      chip.className = 'pair-chip';
+      chip.innerHTML = `✅ <strong>${hanzi}</strong> - <em>${pinyin}</em>`;
+      pairList.appendChild(chip);
+    }
+
+    function finishGame(){
+      stopTimer();
+      updateScore();
+      const msg = `完成！用时 ${fmtTime(seconds)}，最终得分：${Math.round(score)} 分（最高 100 分）。`;
+      setTimeout(()=>alert(msg), 50);
+    }
+
+    function checkMatch(){
+      const [a,b] = selection;
+      // 保证 a 是汉字，b 是拼音
+      let hanziSel = a.type==='hanzi' ? a : b;
+      let pinyinSel = a.type==='pinyin' ? a : b;
+
+      const ok = getMatchResult(hanziSel.key, pinyinSel.key);
+
+      if(ok){
+        markCard(hanziSel.el, true);
+        markCard(pinyinSel.el, true);
+        lockCard(hanziSel.el);
+        lockCard(pinyinSel.el);
+        matched.add(hanziSel.key);
+        addPairChip(hanziSel.key, pinyinSel.key);
+        // 正确加分
+        score += POINTS_CORRECT;
+        updateScore();
+        // 朗读汉字
+        ttsSpeak(hanziSel.key);
+        // 全部完成？
+        if(matched.size === PAIRS.length){
+          finishGame();
+        }
+      }else{
+        markCard(hanziSel.el, false);
+        markCard(pinyinSel.el, false);
+        // 错误扣分（不得分且扣分）
+        score -= POINTS_WRONG;
+        updateScore();
+        // 取消选中状态
+        setTimeout(()=>{
+          [hanziSel.el, pinyinSel.el].forEach(el=>{
+            el.classList.remove('selected');
+            el.setAttribute('aria-pressed','false');
+          });
+        }, 320);
+      }
+      selection = [];
+    }
+
+    // === 控制 ===
+    startBtn.addEventListener('click', ()=>{
+      if(started) return;
+      started = true;
+      startBtn.disabled = true;
+      setBoardInteractivity(true);
+      startTimer();
+    });
+
+    resetBtn.addEventListener('click', ()=>{
+      // 停止语音
+      try{ speechSynthesis.cancel(); }catch(e){}
+      stopTimer();
+      started = false; seconds = 0; timeEl.textContent = fmtTime(0);
+      startBtn.disabled = false;
+      buildBoards();
+    });
+
+    // 初始渲染
+    buildBoards();
+
+    // 在某些浏览器上，需要等待声音列表加载
+    if('speechSynthesis' in window){
+      window.speechSynthesis.onvoiceschanged = () => {};
+    }
+
+    // =========================
+    // 开发者自动化测试（不会影响游戏功能）
+    // =========================
+    (function runAutomatedTests(){
+      const results = [];
+      const test = (name, fn) => {
+        try{ fn(); results.push({name, pass:true}); }
+        catch(err){ results.push({name, pass:false, err}); }
+      };
+
+      // 用例1：配对表长度与唯一性
+      test('PAIRS 长度 > 0 且汉字/拼音唯一', ()=>{
+        if(PAIRS.length === 0) throw new Error('PAIRS 为空');
+        const setH = new Set(PAIRS.map(p=>p.hanzi));
+        const setP = new Set(PAIRS.map(p=>p.pinyin));
+        if(setH.size !== PAIRS.length) throw new Error('汉字有重复');
+        if(setP.size !== PAIRS.length) throw new Error('拼音有重复');
+      });
+
+      // 用例2：每个正确配对返回 true
+      test('getMatchResult 对于正确配对应为 true', ()=>{
+        PAIRS.forEach(p=>{
+          if(!getMatchResult(p.hanzi, p.pinyin)){
+            throw new Error(p.hanzi + ' 映射失败');
+          }
+        });
+      });
+
+      // 用例3：一个错误配对返回 false
+      test('getMatchResult 错误配对应为 false', ()=>{
+        const wrong = !getMatchResult('老师', 'míngzi');
+        if(!wrong) throw new Error('错误配对未被识别');
+      });
+
+      // 用例4：计分加/扣分逻辑
+      test('计分：正确加分、错误扣分且不为负', ()=>{
+        const s0 = score;
+        score = 0; updateScore();
+        // 模拟正确一次
+        score += POINTS_CORRECT; updateScore();
+        const afterRight = Math.round(score);
+        // 模拟错误一次
+        score -= POINTS_WRONG; updateScore();
+        const afterWrong = Math.round(score);
+        if(afterRight <= 0) throw new Error('正确未加分');
+        if(afterWrong < 0) throw new Error('扣分导致负数');
+        score = s0; updateScore();
+      });
+
+      // 用例5：满分不超过 100
+      test('最高不超过 100', ()=>{
+        const s0 = score;
+        score = 0; updateScore();
+        for(let i=0;i<PAIRS.length+5;i++){ score += POINTS_CORRECT; updateScore(); }
+        if(Math.round(score) > 100) throw new Error('超过 100 分');
+        score = s0; updateScore();
+      });
+
+      // 渲染测试结果（折叠面板）
+      const list = document.getElementById('testList');
+      if(list){
+        results.forEach(r=>{
+          const li = document.createElement('li');
+          li.textContent = `${r.pass ? '✅' : '❌'} ${r.name}` + (r.pass? '' : ` — ${r.err}`);
+          list.appendChild(li);
+        });
+      }
+
+      // 暴露给控制台调试
+      window.__tests__ = results;
+    })();
+  </script>
+</body>
+</html>
